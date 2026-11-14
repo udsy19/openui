@@ -11,7 +11,7 @@ import type { MessageFormat } from "../../types/messageFormat";
 interface LangChainMessage {
   id?: string;
   type: "human" | "ai" | "tool" | "system" | "developer" | (string & {});
-  content: string | Array<{ type: string; text?: string }>;
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
   name?: string;
   tool_calls?: Array<{
     id: string;
@@ -26,7 +26,7 @@ interface LangChainMessage {
 function toLangChainMessage(message: Message): LangChainMessage {
   switch (message.role) {
     case "user":
-      return { type: "human", content: message.content ?? "" };
+      return { type: "human", content: toLangChainContent(message.content) };
 
     case "assistant": {
       const result: LangChainMessage = { type: "ai", content: message.content ?? "" };
@@ -56,6 +56,24 @@ function toLangChainMessage(message: Message): LangChainMessage {
     default:
       return { type: "system", content: "" };
   }
+}
+
+/**
+ * Binary parts become OpenAI-style `image_url` blocks, the image input LangChain
+ * chat models accept across providers (the same mapping `openAIMessageFormat`
+ * uses). An AG-UI `binary` block passed through as-is is rejected by the model.
+ */
+function toLangChainContent(content: UserMessage["content"]): LangChainMessage["content"] {
+  if (typeof content === "string") return content;
+  return (
+    content?.map((part) => {
+      if (part.type === "binary") {
+        const url = part.url ?? `data:${part.mimeType};base64,${part.data ?? ""}`;
+        return { type: "image_url", image_url: { url } };
+      }
+      return part;
+    }) ?? ""
+  );
 }
 
 // ── Inbound (LangGraph → AG-UI) ────────────────────────────────
